@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background: #f8fafc;
+  color: #101828;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.file-input::file-selector-button {
+  border: 0;
+  border-radius: 999px;
+  background: #101828;
+  color: white;
+  padding: 0.65rem 1rem;
+  margin-right: 1rem;
+  cursor: pointer;
+}
