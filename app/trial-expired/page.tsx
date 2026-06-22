@@ -1,5 +1,7 @@
 import { getTrialStatus } from '@/lib/trial';
 
+export const dynamic = 'force-dynamic';
+
 export default function TrialExpiredPage() {
   const status = getTrialStatus();
   const supportEmail = process.env.TRIAL_SUPPORT_EMAIL;

@@ -9,13 +9,16 @@
   },
   "dependencies": {
     "@libsql/client": "^0.15.9",
+    "@tesseract.js-data/eng": "^1.0.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.468.0",
     "mammoth": "^1.8.0",
     "next": "^16.2.6",
     "openai": "^4.104.0",
+    "pdf-parse": "^2.4.5",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "tesseract.js": "^7.0.0",
     "uuid": "^11.1.1",
     "zod": "^3.23.8"
   },
@@ -31,7 +34,7 @@
     "typescript": "^5.6.3"
   },
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=20.16.0"
   },
   "private": true
 }

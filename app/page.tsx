@@ -36,7 +36,7 @@ function isRateLimitedAnswer(answer: GeneratedAnswer) {
 
 type KnowledgeStreamEvent =
   | { type: 'progress'; phase: string; progress: number; fileName?: string; insertedChunks?: number; totalChunks?: number }
-  | { type: 'complete'; progress: number; totalChunks: number; sources: { fileName: string; chunks: number }[]; skipped: { fileName: string; reason: string }[] }
+  | { type: 'complete'; progress: number; totalChunks: number; sources: { fileName: string; chunks: number; warnings?: string[] }[]; skipped: { fileName: string; reason: string }[] }
   | { type: 'error'; error: string; skipped?: { fileName: string; reason: string }[] };
 
 type ExtractResponse = { totalQuestions: number; questions: QuestionCandidate[] };
@@ -157,10 +157,17 @@ export default function HomePage() {
           completed = true;
           setKnowledgeProgress(100);
           setKnowledgePhase('Knowledge ready');
-          setMessage(`${event.sources.length} file(s) added to the knowledge library.`);
+          const warningLines = event.sources.flatMap((source) => (source.warnings || []).map((warning) => `${source.fileName}: ${warning}`));
+          setMessage(`${event.sources.length} file(s) added to the knowledge library.${event.skipped.length ? ` ${event.skipped.length} file(s) skipped.` : ''}`);
+          if (event.skipped.length || warningLines.length) {
+            setError([...warningLines, ...event.skipped.map((item) => `${item.fileName}: ${item.reason}`)].join('\n'));
+          }
           return;
         }
-        if (event.type === 'error') setError('Some files could not be processed. Check the file format and try again.');
+        if (event.type === 'error') {
+          const skipped = event.skipped?.map((item) => `${item.fileName}: ${item.reason}`).join('\n');
+          setError(skipped ? `${event.error}\n${skipped}` : event.error);
+        }
       };
 
       while (true) {
@@ -356,7 +363,7 @@ export default function HomePage() {
             <div className="mb-5 flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-base font-bold">Add knowledge</h2>
-                <p className="mt-1 text-sm text-slate-500">Controlled DOCX or TXT files used as source material.</p>
+                <p className="mt-1 text-sm text-slate-500">Controlled DOCX, PDF, or TXT files used as source material.</p>
               </div>
               <UploadCloud className="h-6 w-6 text-slate-400" />
             </div>
@@ -368,7 +375,7 @@ export default function HomePage() {
               <option value="standard_answer">Standard answer bank</option>
               <option value="other">Other</option>
             </select>
-            <input className="file-input mt-4 w-full rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm" type="file" multiple accept=".docx,.txt" onChange={(e) => setKnowledgeFiles(e.target.files)} />
+            <input className="file-input mt-4 w-full rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm" type="file" multiple accept=".docx,.pdf,.txt,application/pdf,text/plain" onChange={(e) => setKnowledgeFiles(e.target.files)} />
             <button onClick={ingestKnowledge} disabled={busy !== null || !knowledgeFiles?.length} className="relative mt-4 inline-flex w-full cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg bg-slate-950 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
               {busy === 'knowledge' && <span className="absolute inset-y-0 left-0 bg-emerald-500/35" style={{ width: `${knowledgeProgress}%` }} />}
               <span className="relative z-10 inline-flex items-center gap-2">

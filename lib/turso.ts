@@ -23,7 +23,7 @@ export function getTursoClient() {
   const authToken = process.env.TURSO_AUTH_TOKEN;
 
   if (!url || !authToken) {
-    throw new Error('Turso environment variables are missing. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN.');
+    throw new Error('Turso environment variables are missing in this runtime. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in .env.local for localhost, or in your deployment provider for production.');
   }
 
   return createClient({ url, authToken });

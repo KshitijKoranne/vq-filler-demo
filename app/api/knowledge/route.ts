@@ -1,20 +1,20 @@
-import mammoth from 'mammoth';
-import { createHash } from 'crypto';
 import { z } from 'zod';
 import { saveKnowledgeChunks } from '@/lib/rag';
 import { exceedsContentLength, MAX_KNOWLEDGE_FILE_BYTES, MAX_KNOWLEDGE_FILES, MAX_KNOWLEDGE_REQUEST_BYTES } from '@/lib/security';
 import { chunkText } from '@/lib/text';
+import { extractKnowledgeText } from '@/lib/knowledgeText';
 import { getTrialStatus, trialInactiveResponse } from '@/lib/trial';
 import type { KnowledgeSourceType } from '@/lib/types';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const SourceTypeSchema = z.enum(['policy', 'procedure', 'previous_questionnaire', 'standard_answer', 'other']);
 
 type IngestedSource = {
   fileName: string;
   chunks: number;
+  warnings?: string[];
 };
 
 type SkippedSource = {
@@ -39,50 +39,25 @@ function explainExtractionError(fileName: string, error: unknown) {
     return `${fileName} could not be read as DOCX. It may be an old .doc file, password-protected, empty, corrupted, or incorrectly renamed as .docx. Open it in Word/Google Docs and export/save again as a fresh .docx.`;
   }
 
-  if (/too large|only docx and txt|old \.doc|empty|valid docx/i.test(rawMessage)) {
+  if (/too large|only docx|only docx, pdf, and txt|old \.doc|empty|valid docx|readable text|unsupported|embedded objects/i.test(rawMessage)) {
     return `${fileName} could not be processed: ${rawMessage}`;
   }
 
-  return `${fileName} could not be processed. Check that it is a readable DOCX or TXT file.`;
+  if (/pdf|ocr|scanned|password|encrypted|protected/i.test(rawMessage)) {
+    return `${fileName} could not be processed: ${rawMessage}`;
+  }
+
+  return `${fileName} could not be processed. Check that it is a readable DOCX, PDF, or TXT file.`;
 }
 
 function sendEvent(controller: ReadableStreamDefaultController<Uint8Array>, encoder: TextEncoder, event: StreamEvent) {
   controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
 }
 
-function fingerprintText(text: string) {
-  return createHash('sha256').update(text.replace(/\s+/g, ' ').trim()).digest('hex');
-}
-
-async function extractText(file: File) {
+function assertFileSize(file: File) {
   if (file.size > MAX_KNOWLEDGE_FILE_BYTES) {
     throw new Error(`The file is too large. Maximum supported file size is ${Math.round(MAX_KNOWLEDGE_FILE_BYTES / 1024 / 1024)} MB.`);
   }
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const fileName = file.name.toLowerCase();
-
-  if (buffer.length === 0) {
-    throw new Error('The file is empty.');
-  }
-
-  if (fileName.endsWith('.doc')) {
-    throw new Error('Old .doc files are not supported yet. Open the file and save/export it as .docx.');
-  }
-
-  if (fileName.endsWith('.docx')) {
-    if (!isDocxBuffer(buffer)) {
-      throw new Error('This file does not look like a valid DOCX zip package. Open it and save/export it again as .docx.');
-    }
-    const result = await mammoth.extractRawText({ buffer });
-    return result.value;
-  }
-
-  if (file.type.startsWith('text/') || fileName.endsWith('.txt')) {
-    return buffer.toString('utf-8');
-  }
-
-  throw new Error('Only DOCX and TXT knowledge files are supported in this MVP.');
 }
 
 export async function POST(request: Request) {
@@ -125,9 +100,18 @@ export async function POST(request: Request) {
         for (const file of files) {
           try {
             emit({ type: 'progress', phase: `Reading ${file.name}`, progress: Math.round((processedFiles / files.length) * 10), fileName: file.name });
-            const text = await extractText(file);
-            const chunks = chunkText(text);
-            const sourceFingerprint = fingerprintText(text);
+            assertFileSize(file);
+            const extracted = await extractKnowledgeText(file, {
+              onProgress: ({ phase }) => {
+                emit({
+                  type: 'progress',
+                  phase: `${phase} for ${file.name}`,
+                  progress: Math.max(5, Math.min(80, Math.round(((processedFiles + 0.5) / files.length) * 100))),
+                  fileName: file.name,
+                });
+              },
+            });
+            const chunks = chunkText(extracted.text);
 
             if (chunks.length === 0) {
               skipped.push({ fileName: file.name, reason: 'No readable text was found in this file.' });
@@ -139,7 +123,7 @@ export async function POST(request: Request) {
               sourceName: file.name,
               sourceType,
               chunks,
-              sourceFingerprint,
+              sourceFingerprint: extracted.fingerprint,
               onProgress: ({ inserted, total }) => {
                 const fileShare = 1 / files.length;
                 const fileStart = processedFiles / files.length;
@@ -163,7 +147,7 @@ export async function POST(request: Request) {
             }
 
             totalChunks += inserted.inserted;
-            sources.push({ fileName: file.name, chunks: inserted.inserted });
+            sources.push({ fileName: file.name, chunks: inserted.inserted, warnings: extracted.warnings });
             processedFiles++;
           } catch (error) {
             skipped.push({ fileName: file.name, reason: explainExtractionError(file.name, error) });

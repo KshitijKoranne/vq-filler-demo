@@ -10,14 +10,16 @@ Create these variables in your deployment provider:
 - NVIDIA_CHAT_MODEL, optional, default: meta/llama-3.1-70b-instruct
 - NVIDIA_EMBEDDING_MODEL, optional, default: nvidia/llama-nemotron-embed-1b-v2
 - EMBEDDING_DIMENSIONS, optional, default: 2048
-- MIN_ANSWER_CONFIDENCE, optional, default: 0.25
+- MIN_ANSWER_CONFIDENCE, optional, default: 0.81; values below 0.81 are raised to 0.81
 - MIN_RETRIEVAL_SIMILARITY, optional, default: 0.35
+- MAX_OCR_PAGES_PER_PDF, optional, default: 80
+- OCR_RENDER_WIDTH, optional, default: 1800
 - FILL_DEBUG, optional, set to true for retrieval diagnostics
 - ADMIN_HEALTH_TOKEN, optional, requires `Authorization: Bearer <token>` for `/api/health` when set
 
 Never commit real keys or tokens to this repository.
 
-The default embedding model is expected to return 2048-dimensional vectors for Turso `F32_BLOB(2048)` storage. If you change `NVIDIA_EMBEDDING_MODEL` or `EMBEDDING_DIMENSIONS`, reingest or re-embed existing knowledge chunks.
+The default embedding model is expected to return 2048-dimensional vectors for Turso `F32_BLOB(2048)` storage. If you change `NVIDIA_EMBEDDING_MODEL`, reingest or re-embed existing knowledge chunks.
 
 For client trials, create a separate Turso database per client and set `TRIAL_EXPIRES_AT` to the end of the approved trial window. The expiry check is enforced server-side in production pages and API routes. It is not a substitute for keeping source code, deployment access, and environment variables private.
 

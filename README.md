@@ -56,7 +56,7 @@ For each serious client trial:
 - `NVIDIA_CHAT_MODEL`, default: `meta/llama-3.1-70b-instruct`
 - `NVIDIA_EMBEDDING_MODEL`, default: `nvidia/llama-nemotron-embed-1b-v2`
 - `EMBEDDING_DIMENSIONS`, default: `2048`
-- `MIN_ANSWER_CONFIDENCE`, default: `0.25`
+- `MIN_ANSWER_CONFIDENCE`, default: `0.81`; lower values are raised to `0.81`
 - `MIN_RETRIEVAL_SIMILARITY`, default: `0.35`
 - `FILL_DEBUG`, set `true` for retrieval diagnostics
 - `ADMIN_HEALTH_TOKEN`, protects `/api/health` with a bearer token when set
