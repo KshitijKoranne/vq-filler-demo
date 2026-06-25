@@ -29,6 +29,28 @@ function formatSourceType(value: string) {
   return labels[value] || value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function formatDateTime(value: string) {
+  if (!value) return 'Not added yet';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function getLatestIngestedAt(sources: KnowledgeSourceSummary[]) {
+  const latest = sources
+    .map((source) => new Date(source.latestIngestedAt).getTime())
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => b - a)[0];
+
+  return latest ? formatDateTime(new Date(latest).toISOString()) : 'Not added yet';
+}
+
 export default function KnowledgePage() {
   const [sources, setSources] = useState<KnowledgeSourceSummary[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -173,14 +195,14 @@ export default function KnowledgePage() {
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Controlled knowledge</p>
                 <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">Manage approved QA sources</h1>
-                <p className="mt-2 max-w-2xl text-sm text-slate-600">Review the controlled documents and answer banks used to support questionnaire drafts.</p>
+                <p className="mt-2 max-w-2xl text-sm text-slate-600">Review the documents and answer banks used to draft questionnaire answers.</p>
               </div>
               <button onClick={loadSources} disabled={busy !== null} className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
                 {busy === 'load' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Refresh
               </button>
             </header>
 
-            <section className="grid gap-3 md:grid-cols-3">
+            <section className="grid gap-3 md:grid-cols-4">
               <div className="rounded-lg border border-slate-200 bg-white p-4">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sources</div>
                 <div className="mt-2 text-2xl font-bold">{sources.length}</div>
@@ -189,7 +211,12 @@ export default function KnowledgePage() {
               <div className="rounded-lg border border-slate-200 bg-white p-4">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sections</div>
                 <div className="mt-2 text-2xl font-bold text-emerald-700">{sources.reduce((sum, source) => sum + source.chunks, 0)}</div>
-                <div className="mt-1 text-xs text-slate-500">indexed source sections</div>
+                <div className="mt-1 text-xs text-slate-500">saved source sections</div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Last Updated</div>
+                <div className="mt-2 text-sm font-bold leading-7 text-slate-800">{getLatestIngestedAt(sources)}</div>
+                <div className="mt-1 text-xs text-slate-500">latest saved source</div>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-4">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</div>
@@ -211,10 +238,11 @@ export default function KnowledgePage() {
               ) : (
                 <div className="overflow-hidden rounded-lg border border-slate-200">
                   <div className="grid grid-cols-12 gap-3 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">
-                    <div className="col-span-5">Source</div>
+                    <div className="col-span-4">Source</div>
                     <div className="col-span-3">Category</div>
                     <div className="col-span-2">Sections</div>
-                    <div className="col-span-2 text-right">Actions</div>
+                    <div className="col-span-2">Updated</div>
+                    <div className="col-span-1 text-right">Actions</div>
                   </div>
                   {sources.map((source) => {
                     const progressKey = `${source.sourceName}-${source.sourceType}`;
@@ -222,13 +250,14 @@ export default function KnowledgePage() {
                     const reingestBusy = busy === `reingest-${source.sourceName}-${source.sourceType}`;
                     return (
                       <div key={`${source.sourceName}-${source.sourceType}`} className="grid grid-cols-12 items-center gap-3 border-t border-slate-200 px-4 py-4 text-sm">
-                        <div className="col-span-12 font-semibold text-slate-900 md:col-span-5">
+                        <div className="col-span-12 font-semibold text-slate-900 md:col-span-4">
                           {source.sourceName}
                           {reingestProgress[progressKey] && <div className="mt-1 text-xs font-medium text-slate-500">Refreshing {reingestProgress[progressKey]}</div>}
                         </div>
                         <div className="col-span-6 text-slate-600 md:col-span-3">{formatSourceType(source.sourceType)}</div>
                         <div className="col-span-3 text-slate-600 md:col-span-2">{source.chunks}</div>
-                        <div className="col-span-3 flex justify-end gap-2 md:col-span-2">
+                        <div className="col-span-12 text-slate-600 md:col-span-2">{formatDateTime(source.latestIngestedAt)}</div>
+                        <div className="col-span-3 flex justify-end gap-2 md:col-span-1">
                           <button onClick={() => reingestSource(source)} disabled={busy !== null} className="inline-flex cursor-pointer rounded-lg p-2 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50" aria-label={`Refresh embeddings for ${source.sourceName}`} title="Refresh embeddings">
                             {reingestBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
                           </button>
