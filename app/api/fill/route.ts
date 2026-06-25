@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
-import { extractQuestionsFromDocx, fillDocx } from '@/lib/docx';
+import { extractQuestionsFromDocx } from '@/lib/docx';
 import { retrieveContext } from '@/lib/rag';
 import { answerQuestion } from '@/lib/ai';
 import { buildQmdQuery } from '@/lib/qmd';
-import { exceedsContentLength, MAX_FILL_REQUEST_BYTES, MAX_FINALIZE_ANSWERS, MAX_QUESTIONNAIRE_BYTES } from '@/lib/security';
+import { exceedsContentLength, MAX_FILL_REQUEST_BYTES, MAX_QUESTIONNAIRE_BYTES } from '@/lib/security';
 import { getTrialStatus, trialInactiveResponse } from '@/lib/trial';
-import type { FillResult, GeneratedAnswer, KnowledgeChunk } from '@/lib/types';
-import { z } from 'zod';
+import type { GeneratedAnswer, KnowledgeChunk } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -37,37 +36,6 @@ function mergeContext(chunks: KnowledgeChunk[], limit = 6) {
 
 function buildQuestionIntent(question: string) {
   return buildQmdQuery(question);
-}
-
-const FinalizeAnswerSchema = z.object({
-  questionId: z.string().max(120),
-  question: z.string().max(1200),
-  answer: z.string().max(3000),
-  status: z.enum(['answered', 'blank', 'review']),
-  confidence: z.number().min(0).max(1),
-  reason: z.string().max(1000),
-  evidence: z.array(z.object({
-    sourceName: z.string().max(300),
-    excerpt: z.string().max(1200),
-  })).max(8),
-});
-
-function parseAnswers(value: FormDataEntryValue | null): GeneratedAnswer[] {
-  if (typeof value !== 'string' || !value.trim()) return [];
-  const parsed = JSON.parse(value);
-  return z.array(FinalizeAnswerSchema).max(MAX_FINALIZE_ANSWERS).parse(parsed) as GeneratedAnswer[];
-}
-
-function buildResult(fileName: string, answers: GeneratedAnswer[], outputBase64: string): FillResult {
-  return {
-    fileName: fileName.replace(/\.docx$/i, '') + '-filled.docx',
-    totalQuestions: answers.length,
-    answered: answers.filter((a) => a.status === 'answered').length,
-    needsReview: answers.filter((a) => a.status === 'review').length,
-    blank: answers.filter((a) => a.status === 'blank').length,
-    answers,
-    outputBase64,
-  };
 }
 
 function isRateLimitError(error: unknown) {
@@ -123,7 +91,7 @@ export async function POST(request: Request) {
     }
 
     const formData = await request.formData();
-    const action = String(formData.get('action') || 'batch');
+    const action = String(formData.get('action') || 'extract');
 
     if (action === 'answer') {
       const questionId = String(formData.get('questionId') || '').trim();
@@ -149,6 +117,10 @@ export async function POST(request: Request) {
       }
     }
 
+    if (action !== 'extract') {
+      return NextResponse.json({ error: 'Unsupported action.' }, { status: 400 });
+    }
+
     const file = formData.get('file');
     if (!(file instanceof File)) {
       return NextResponse.json({ error: 'Upload a DOCX questionnaire.' }, { status: 400 });
@@ -163,40 +135,10 @@ export async function POST(request: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-
-    if (action === 'extract') {
-      const questions = await extractQuestionsFromDocx(buffer);
-      return NextResponse.json({ ok: true, action: 'extract', totalQuestions: questions.length, questions });
-    }
-
-    if (action === 'finalize') {
-      const answers = parseAnswers(formData.get('answers'));
-      const output = await fillDocx(buffer, answers);
-      return NextResponse.json(buildResult(file.name, answers, output.toString('base64')));
-    }
-
     const questions = await extractQuestionsFromDocx(buffer);
-    const start = Math.max(0, Number(formData.get('start') || '0'));
-    const batchSize = Math.min(10, Math.max(1, Number(formData.get('batchSize') || '10')));
-    const selectedQuestions = questions.slice(start, start + batchSize);
-    const answers: GeneratedAnswer[] = [];
-
-    for (const question of selectedQuestions) {
-      answers.push(await generateAnswer(question.id, question.question));
-    }
-
-    const nextStart = start + selectedQuestions.length;
-    return NextResponse.json({
-      ok: true,
-      action: 'batch',
-      totalQuestions: questions.length,
-      start,
-      processed: selectedQuestions.length,
-      nextStart: nextStart < questions.length ? nextStart : null,
-      answers,
-    });
+    return NextResponse.json({ ok: true, action: 'extract', totalQuestions: questions.length, questions });
   } catch (error) {
     console.error('[VQ_FILL_ERROR]', error instanceof Error ? error.message : error);
-    return NextResponse.json({ error: 'Questionnaire filling failed. Check the uploaded DOCX and try again.' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not prepare answers. Check the uploaded DOCX and try again.' }, { status: 500 });
   }
 }
