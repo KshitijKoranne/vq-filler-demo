@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { saveKnowledgeChunks } from '@/lib/rag';
 import { getTrialStatus, trialInactiveResponse } from '@/lib/trial';
@@ -18,6 +19,10 @@ function buildStandardAnswerText(question: string, answer: string) {
   return `Question: ${question.trim()}\nApproved answer: ${answer.trim()}`;
 }
 
+function buildApprovedAnswerFingerprint(question: string, answer: string) {
+  return createHash('sha256').update(`${question.trim()}\n${answer.trim()}`).digest('hex');
+}
+
 export async function POST(request: Request) {
   try {
     const trialStatus = getTrialStatus();
@@ -33,10 +38,12 @@ export async function POST(request: Request) {
     });
 
     if (input.vote === 'up') {
+      const fingerprint = buildApprovedAnswerFingerprint(input.question, input.answer);
       await saveKnowledgeChunks({
-        sourceName: `Approved answer - ${input.questionId}`,
+        sourceName: `Approved answer - ${fingerprint.slice(0, 12)}`,
         sourceType: 'standard_answer',
         chunks: [buildStandardAnswerText(input.question, input.answer)],
+        sourceFingerprint: fingerprint,
       });
     }
 
