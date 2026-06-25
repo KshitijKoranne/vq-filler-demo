@@ -7,12 +7,14 @@ This repository is copied from the private builder project and should stay under
 ## What This Demo Does
 
 - Upload approved company knowledge such as SOPs, policies, standard answers, and previous questionnaires.
-- Store extracted knowledge chunks in a Turso/libSQL vector database.
+- Store extracted knowledge sections in a Turso/libSQL vector database.
 - Upload a table-based DOCX vendor/customer questionnaire.
 - Detect likely questionnaire rows and answer cells.
 - Draft short English answers using only retrieved knowledge snippets.
-- Leave unsupported answers blank or marked for review.
-- Export a filled DOCX while preserving the original package structure as much as possible.
+- Let users review, edit, copy, approve, mark blank, or mark answers as needing work.
+- Save approved question-and-answer pairs back into the knowledge library for future use.
+
+Filled DOCX export is not part of this demo version.
 
 ## Demo Trial Control
 
@@ -81,5 +83,3 @@ npm run build
 ## Operating Rule
 
 The system should never guess. If an answer is not clearly supported by the ingested knowledge base, it remains blank or marked for review.
-
-Evidence is shown only in the app review screen. Evidence is not written into the exported questionnaire.
